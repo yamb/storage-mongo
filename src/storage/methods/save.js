@@ -1,18 +1,19 @@
 import { ObjectId } from 'mongodb';
 
-import { StorageNotOpenError, PostNotFoundError, StorageWriteError } from '#core/errors';
+import { StorageNotOpenError, StorageWriteError } from '#core/errors';
 
 import { driverAbort } from '../abort.js';
 import { capture } from '../capture.js';
 import { classify } from '../errors.js';
 import { getState } from '../internal.js';
+import { guard, mismatch } from '../version.js';
 import { hydrateRaw } from './hydrate.js';
 
 export default {
   name: 'save',
 
   async fn(storage, rawInput, options = {}) {
-    const { signal } = options;
+    const { signal, expected } = options;
     const state = getState(storage);
 
     if (!state.collection) {
@@ -33,7 +34,7 @@ export default {
       const writeOptions = { signal: abort?.signal, ignoreUndefined: true };
 
       if (id) {
-        const result = await state.collection.replaceOne({ _id: doc._id }, doc, {
+        const result = await state.collection.replaceOne(guard(doc._id, expected), doc, {
           ...writeOptions,
           upsert: false
         });
@@ -43,7 +44,7 @@ export default {
         }
 
         if (result.matchedCount === 0) {
-          throw new PostNotFoundError(`id "${id}" not found`);
+          throw await mismatch(state.collection, doc._id, expected, abort?.signal);
         }
       } else {
         const result = await state.collection.insertOne(doc, writeOptions);

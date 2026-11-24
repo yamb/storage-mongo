@@ -8,7 +8,7 @@ For GitHub Packages, route the `@yamb` scope to `https://npm.pkg.github.com` and
 
 ## Quick start
 
-Requires Node.js 26.13 or later, `yamb` and an existing MongoDB 9 database with a `posts` collection and the [required indexes](#configuration-and-indexes).
+Requires Node.js 26.13 or later, `yamb` 1.0.5 or later and an existing MongoDB 9 database with a `posts` collection and the [required indexes](#configuration-and-indexes).
 
 ```bash
 pnpm add yamb yamb-storage-mongo
@@ -76,7 +76,9 @@ The check requires full, visible indexes without a collation entry. A missing co
 
 Save captures input before driver I/O. It rejects cycles, unsupported values, unpaired surrogates in strings or keys, nesting deeper than 100 and a BSON size lower bound above 16 MiB. The driver checks the exact BSON size.
 
-Updates replace the complete document. A missing update target fails, and the unique index enforces URI collisions. Inserts, updates and removals require driver acknowledgment. Independently loaded posts use whole-document last-write semantics.
+Updates replace the complete document. A missing update target fails, and the unique index enforces URI collisions. Inserts, updates, removals and fences require driver acknowledgment.
+
+Core stores a version string in the top-level `version` field. When core supplies an expected version, `replaceOne`, `deleteOne` and the fence `updateOne` filter on `{ _id, version }`, so the comparison and the write are one atomic operation; `null` matches a document without `version`. A filter that matches nothing is followed by an `_id` lookup that reports `YAMB_POST_CONFLICT` for an existing document and `YAMB_POST_NOT_FOUND` otherwise. Documents written before versions need no migration: their first conditional write or fence adds the field.
 
 MongoDB executes queries with typed option comparisons. Missing option fields match defaults supplied by core on open. Arrays never match a scalar option filter. Each option filter is a field predicate on `options.<name>`, so an application index such as `{ status: 1, 'options.homepage': 1, publishedAt: -1, uri: -1 }` can serve it. `find(id)` looks up a post by ID and `fetch(uri)` looks it up by current URI. Core refreshes its lookup maps from the `[id, uri]` pairs yielded by `entries()`.
 
@@ -123,7 +125,8 @@ Each traversal owns a lazy cursor. Early exit or cancellation awaits cleanup and
 | `YAMB_MONGODB_INDEX` | Missing prepared collection/index (`MongoIndexError`) |
 | `YAMB_STORAGE_READ`, `YAMB_STORAGE_WRITE` | Read/write, BSON or cursor cleanup failure; cause retained |
 | `YAMB_STORAGE_DUPLICATE` | Duplicate key |
-| `YAMB_POST_NOT_FOUND` | Missing update/removal target; missing reads return `null` |
+| `YAMB_POST_NOT_FOUND` | Missing update/removal/fence target; missing reads return `null` |
+| `YAMB_POST_CONFLICT` | Stored version differs from the expected one; nothing written |
 | `YAMB_STORAGE_NOT_OPEN` | Operation outside an open lifetime |
 | `YAMB_QUERY_VALIDATION` | Invalid query or pagination |
 
