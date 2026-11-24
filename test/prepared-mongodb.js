@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import nodeTest from 'node:test';
 
-import { mongodb as createStorage } from '@meritt/yamb-storage-mongo';
 import { MongoClient, ObjectId } from 'mongodb';
+import { mongodb as createStorage } from 'yamb-storage-mongo';
 
 export const uri = process.env.MONGO_URI;
 export const dbName = process.env.YAMB_MONGO_DB;

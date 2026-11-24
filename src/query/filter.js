@@ -35,6 +35,18 @@ function literal(field, value) {
   }
 }
 
+function option(value, defaulted) {
+  if (value === null) {
+    return defaulted
+      ? { $eq: null, $not: { $type: 'array' } }
+      : { $type: 'null', $not: { $type: 'array' } };
+  }
+
+  return defaulted
+    ? { $in: [value, null], $not: { $type: ['null', 'array'] } }
+    : { $eq: value, $not: { $type: 'array' } };
+}
+
 export function buildMongoFilter(query, descending = true, defaults = {}) {
   const filter = {};
 
@@ -47,27 +59,17 @@ export function buildMongoFilter(query, descending = true, defaults = {}) {
       );
     }
 
-    const clauses = [];
+    const entries = Object.entries(result.data);
 
-    for (const [key, value] of Object.entries(result.data)) {
-      const field = `$options.${key}`;
-      const type = { $type: field };
-      const kind = value === null ? 'null' : { string: 'string', boolean: 'bool' }[typeof value];
-      const typeCheck = kind
-        ? { $eq: [type, kind] }
-        : { $in: [type, ['int', 'long', 'double', 'decimal']] };
-
-      let predicate = { $and: [typeCheck, { $eq: [field, { $literal: value }] }] };
-
-      if (Object.hasOwn(defaults, key) && defaults[key] === value) {
-        predicate = { $or: [predicate, { $eq: [type, 'missing'] }] };
-      }
-
-      clauses.push(predicate);
+    if (entries.length > 0) {
+      filter.options = { $not: { $type: 'array' } };
     }
 
-    if (clauses.length) {
-      filter.$expr = { $and: clauses };
+    for (const [key, value] of entries) {
+      filter[`options.${key}`] = option(
+        value,
+        Object.hasOwn(defaults, key) && defaults[key] === value
+      );
     }
   }
 

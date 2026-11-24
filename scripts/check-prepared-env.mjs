@@ -1,4 +1,4 @@
-import { mongodb } from '@meritt/yamb-storage-mongo';
+import { mongodb } from 'yamb-storage-mongo';
 
 const uri = process.env.MONGO_URI;
 const db = process.env.YAMB_MONGO_DB;
