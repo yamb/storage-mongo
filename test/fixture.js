@@ -52,6 +52,7 @@ export async function blogWith(rows = [], config = {}) {
         records.delete(id);
       }
     },
+    async fence() {},
     async *entries() {
       for (const { id, uri } of records.values()) {
         yield [id, uri];
