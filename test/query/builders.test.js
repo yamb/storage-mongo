@@ -71,6 +71,29 @@ test('uri filter exact', () => {
   });
 });
 
+test('option filters are native field predicates that exclude arrays', () => {
+  assert.deepEqual(
+    buildMongoFilter(
+      { options: { homepage: true, feeds: false, card: null, type: 'note', tid: 1 } },
+      true,
+      { homepage: true, feeds: true, card: null, type: 'article' }
+    ),
+    {
+      options: { $not: { $type: 'array' } },
+      'options.homepage': { $in: [true, null], $not: { $type: ['null', 'array'] } },
+      'options.feeds': { $eq: false, $not: { $type: 'array' } },
+      'options.card': { $eq: null, $not: { $type: 'array' } },
+      'options.type': { $eq: 'note', $not: { $type: 'array' } },
+      'options.tid': { $eq: 1, $not: { $type: 'array' } }
+    }
+  );
+  assert.deepEqual(buildMongoFilter({ options: { card: null } }), {
+    options: { $not: { $type: 'array' } },
+    'options.card': { $type: 'null', $not: { $type: 'array' } }
+  });
+  assert.deepEqual(buildMongoFilter({ options: {} }), {});
+});
+
 test('rejects operator-object in status field', () => {
   assert.throws(() => buildMongoFilter({ status: { $ne: null } }), {
     code: 'YAMB_QUERY_VALIDATION'

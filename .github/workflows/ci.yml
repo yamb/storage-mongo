@@ -36,7 +36,7 @@ jobs:
       YAMB_MONGO_DB: yamb_test_actions
     services:
       mongo:
-        image: mongo:8.0@sha256:479e85ced54ffb8a40dade1dcde2da2a9ae858515b9415e9cc54bfb8f0575d01
+        image: mongo:9.0@sha256:b0c835c26e5997413e985000f1013c275377cd9607761c1784d486f6dd620b7f
         ports:
           - 127.0.0.1:27017:27017
         options: >-
@@ -59,7 +59,7 @@ jobs:
         run: |
           [[ "$PROTECTED" == true ]] || { echo "::error::Enable the v* tag ruleset before tagging"; exit 1; }
           [[ "$GITHUB_REF_NAME" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
-          test "$(jq -er '.name + "@" + .version' package.json)" = "@meritt/yamb-storage-mongo@${GITHUB_REF_NAME#v}"
+          test "$(jq -er '.name + "@" + .version' package.json)" = "yamb-storage-mongo@${GITHUB_REF_NAME#v}"
           test "$(git rev-parse HEAD)" = "$(git rev-parse "$GITHUB_SHA^{commit}")"
           git merge-base --is-ancestor HEAD "refs/remotes/origin/$BRANCH"
 
@@ -97,7 +97,7 @@ jobs:
           git diff --exit-code HEAD
           version="$(jq -er .version package.json)"
           asset="yamb-storage-mongo-$version.tgz"
-          npm_asset="meritt-$asset"
+          npm_asset="npm-$asset"
           bash scripts/pack.sh "$RUNNER_TEMP/release"
           {
             echo "commit=$(git rev-parse HEAD)"
@@ -220,10 +220,10 @@ jobs:
       - name: Verify
         run: |
           test "$(git rev-parse HEAD)" = "$COMMIT"
-          test "$NPM_ASSET" = "meritt-$ASSET"
+          test "$NPM_ASSET" = "npm-$ASSET"
           test "sha256:$(sha256sum "$RUNNER_TEMP/release/$NPM_ASSET" | cut -d ' ' -f 1)" = "$NPM_DIGEST"
           test "$ASSET" = "yamb-storage-mongo-${REF#v}.tgz"
-          test "$(jq -er '.name + "@" + .version' package.json)" = "@meritt/yamb-storage-mongo@${REF#v}"
+          test "$(jq -er '.name + "@" + .version' package.json)" = "yamb-storage-mongo@${REF#v}"
           test "sha256:$(sha256sum "$RUNNER_TEMP/release/$ASSET" | cut -d ' ' -f 1)" = "$DIGEST"
 
       - name: Release
