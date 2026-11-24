@@ -8,7 +8,7 @@ For GitHub Packages, route the `@yamb` scope to `https://npm.pkg.github.com` and
 
 ## Quick start
 
-Requires Node.js 26.13 or later, `yamb` and an existing MongoDB database with a `posts` collection and the [required indexes](#configuration-and-indexes).
+Requires Node.js 26.13 or later, `yamb` and an existing MongoDB 9 database with a `posts` collection and the [required indexes](#configuration-and-indexes).
 
 ```bash
 pnpm add yamb @meritt/yamb-storage-mongo
