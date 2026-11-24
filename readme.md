@@ -78,7 +78,7 @@ Save captures input before driver I/O. It rejects cycles, unsupported values, un
 
 Updates replace the complete document. A missing update target fails, and the unique index enforces URI collisions. Inserts, updates and removals require driver acknowledgment. Independently loaded posts use whole-document last-write semantics.
 
-MongoDB executes queries with typed option comparisons. Missing option fields match defaults supplied by core on open. `find(id)` looks up a post by ID and `fetch(uri)` looks it up by current URI. Core refreshes its lookup maps from the `[id, uri]` pairs yielded by `entries()`.
+MongoDB executes queries with typed option comparisons. Missing option fields match defaults supplied by core on open. Arrays never match a scalar option filter. Each option filter is a field predicate on `options.<name>`, so an application index such as `{ status: 1, 'options.homepage': 1, publishedAt: -1, uri: -1 }` can serve it. `find(id)` looks up a post by ID and `fetch(uri)` looks it up by current URI. Core refreshes its lookup maps from the `[id, uri]` pairs yielded by `entries()`.
 
 ### Ownership and lifecycle
 
