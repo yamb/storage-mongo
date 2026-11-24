@@ -1,6 +1,6 @@
 {
-  "name": "@meritt/yamb-storage-mongo",
-  "version": "0.1.0",
+  "name": "yamb-storage-mongo",
+  "version": "0.1.1",
   "description": "MongoDB storage for Yamb using the official MongoDB driver",
   "keywords": [
     "blog",

@@ -1,4 +1,4 @@
-# @meritt/yamb-storage-mongo
+# yamb-storage-mongo
 
 [![npm version][npm-image]][npm-url] [![Build status][github-actions-image]][github-actions-url] [![Coverage status][coveralls-image]][coveralls-url] [![Dependency status][libraries-image]][libraries-url]
 
@@ -11,14 +11,14 @@ For GitHub Packages, route the `@yamb` scope to `https://npm.pkg.github.com` and
 Requires Node.js 26.13 or later, `yamb` and an existing MongoDB 9 database with a `posts` collection and the [required indexes](#configuration-and-indexes).
 
 ```bash
-pnpm add yamb @meritt/yamb-storage-mongo
+pnpm add yamb yamb-storage-mongo
 ```
 
 Set `MONGO_URI` to the connection URI and `YAMB_MONGO_DB` to the prepared database name.
 
 ```js
-import { mongodb } from '@meritt/yamb-storage-mongo';
 import { yamb } from 'yamb';
+import { mongodb } from 'yamb-storage-mongo';
 
 await using blog = yamb({
   storage: mongodb({
@@ -87,8 +87,8 @@ An adapter-owned client disables driver write retries and closes on shutdown or 
 For an application-owned client, add `mongodb` as a direct dependency and close the client after adapter use.
 
 ```js
-import { mongodb } from '@meritt/yamb-storage-mongo';
 import { MongoClient } from 'mongodb';
+import { mongodb } from 'yamb-storage-mongo';
 
 const client = new MongoClient('mongodb://127.0.0.1:27017', {
   retryWrites: false
@@ -137,11 +137,11 @@ Shared errors come from `yamb/errors`. Adapter-specific classes are internal; in
 
 MIT. See `LICENSE`.
 
-[npm-image]: https://img.shields.io/npm/v/@meritt/yamb-storage-mongo?style=flat
-[npm-url]: https://www.npmjs.com/package/@meritt/yamb-storage-mongo
+[npm-image]: https://img.shields.io/npm/v/yamb-storage-mongo?style=flat
+[npm-url]: https://www.npmjs.com/package/yamb-storage-mongo
 [github-actions-image]: https://github.com/yamb/storage-mongo/actions/workflows/ci.yml/badge.svg
 [github-actions-url]: https://github.com/yamb/storage-mongo/actions/workflows/ci.yml
 [coveralls-image]: https://coveralls.io/repos/github/yamb/storage-mongo/badge.svg
 [coveralls-url]: https://coveralls.io/github/yamb/storage-mongo
-[libraries-image]: https://img.shields.io/librariesio/release/npm/%40meritt%2Fyamb-storage-mongo?style=flat
-[libraries-url]: https://libraries.io/npm/%40meritt%2Fyamb-storage-mongo
+[libraries-image]: https://img.shields.io/librariesio/release/npm/yamb-storage-mongo?style=flat
+[libraries-url]: https://libraries.io/npm/yamb-storage-mongo
