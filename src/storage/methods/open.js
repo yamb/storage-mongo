@@ -41,13 +41,13 @@ async function acquire(state, defaults, signal) {
     abort?.signal?.throwIfAborted();
 
     const db = client.db(config.db);
-    const collections = await db
-      .listCollections({ name: config.collection }, { nameOnly: true, signal: abort?.signal })
+    const [info] = await db
+      .listCollections({ name: config.collection }, { signal: abort?.signal })
       .toArray();
 
-    if (!collections.some((c) => c.name === config.collection)) {
+    if (info?.type !== 'collection' || info.options?.collation) {
       throw new MongoIndexError(
-        'existing MongoDB database requires the Yamb collection and indexes'
+        'existing MongoDB database requires the Yamb collection without a default collation'
       );
     }
 
@@ -76,17 +76,15 @@ async function acquire(state, defaults, signal) {
       }
     }
 
-    const error = abort ? abort.restore(cause) : cause;
-
-    if (signal?.aborted && Object.is(error, signal.reason)) {
-      throw error;
+    if (abort?.cancelled(cause)) {
+      throw abort.reason;
     }
 
-    if (error instanceof MongoIndexError) {
-      throw error;
+    if (cause instanceof MongoIndexError) {
+      throw cause;
     }
 
-    throw new MongoConnectionError('failed to open existing MongoDB storage', { cause: error });
+    throw new MongoConnectionError('failed to open existing MongoDB storage', { cause });
   }
 }
 

@@ -208,7 +208,7 @@ test('tag with special characters is matched exactly', async () => {
     const r1 = await storage.save(rawFor('2026/04/a', { tags: [oddTag] }));
     await storage.save(rawFor('2026/04/b', { tags: ['c'] }));
 
-    const found = await collect(storage.all({ tag: oddTag }, { order: '-publishedAt' }));
+    const found = await collect(storage.all({ tags: [oddTag] }, { order: '-publishedAt' }));
     assert.equal(found.length, 1);
     assert.equal(found[0].id, r1.id);
   } finally {

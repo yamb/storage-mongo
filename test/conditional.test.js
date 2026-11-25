@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 
-import { ObjectId } from 'mongodb';
+import { MongoClient, ObjectId } from 'mongodb';
 import { yamb } from 'yamb';
 
-import { mongodb as createStorage, test } from './prepared-mongodb.js';
+import { mongodb as createStorage, test, uri } from './prepared-mongodb.js';
 
 const conflict = { name: 'PostConflictError', code: 'YAMB_POST_CONFLICT' };
 const notFound = { code: 'YAMB_POST_NOT_FOUND' };
@@ -47,6 +47,43 @@ test('save and remove apply only while the stored version matches', async () => 
   await assert.rejects(storage.save({ ...saved, id: missing }, { expected: 'v2' }), notFound);
   await assert.rejects(storage.remove(missing, { expected: 'v2' }), notFound);
   await assert.rejects(storage.fence(missing, 'v3', { expected: 'v2' }), notFound);
+});
+
+test('IDs outside lowercase ObjectId hex are absent without a database command', async () => {
+  const client = new MongoClient(uri, { retryWrites: false, monitorCommands: true });
+  const storage = createStorage({ client });
+
+  try {
+    await storage.open();
+    const saved = await storage.save(raw('canonical', { version: 'v1' }));
+    let commands = 0;
+    client.on('commandStarted', () => {
+      commands++;
+    });
+
+    for (const id of ['not-an-object-id', saved.id.toUpperCase()]) {
+      assert.equal(await storage.find(id), null);
+      await assert.rejects(storage.save({ ...saved, id, title: 'Alias' }), notFound);
+      await assert.rejects(
+        storage.save({ ...saved, id, title: 'Alias' }, { expected: 'v1' }),
+        notFound
+      );
+      await assert.rejects(storage.remove(id), notFound);
+      await assert.rejects(storage.fence(id, 'v2', { expected: 'v1' }), notFound);
+    }
+
+    for (const ref of [saved.id.toUpperCase(), 'not-an-object-id', 42]) {
+      await assert.rejects(storage.save(raw('linked', { links: { related: [ref] } })), {
+        code: 'YAMB_LINK_REF_NOT_FOUND'
+      });
+    }
+
+    assert.equal(commands, 0);
+    assert.deepEqual(await storage.find(saved.id), saved);
+  } finally {
+    await storage.close();
+    await client.close();
+  }
 });
 
 test('null expects a record without a version', async () => {

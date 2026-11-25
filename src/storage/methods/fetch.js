@@ -1,8 +1,8 @@
-import { StorageNotOpenError, StorageReadError } from '#core/errors';
+import { StorageReadError } from '#core/errors';
 
 import { driverAbort } from '../abort.js';
 import { classify } from '../errors.js';
-import { getState } from '../internal.js';
+import { getState, ready } from '../internal.js';
 import { hydrateRaw } from './hydrate.js';
 
 export default {
@@ -10,11 +10,7 @@ export default {
 
   async fn(storage, uri, options = {}) {
     const { signal } = options;
-    const state = getState(storage);
-
-    if (!state.collection) {
-      throw new StorageNotOpenError();
-    }
+    const collection = ready(getState(storage));
 
     if (typeof uri !== 'string') {
       throw new StorageReadError('uri must be a string');
@@ -25,11 +21,9 @@ export default {
     using abort = signal ? driverAbort(signal) : null;
 
     try {
-      const doc = await state.collection.findOne({ uri }, { signal: abort?.signal });
-
-      return hydrateRaw(doc);
+      return hydrateRaw(await collection.findOne({ uri }, { signal: abort?.signal }));
     } catch (error) {
-      throw classify(error, 'fetch', signal, StorageReadError, abort);
+      throw classify(error, 'fetch', StorageReadError, abort);
     }
   }
 };

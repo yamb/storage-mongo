@@ -1,15 +1,13 @@
-import { StorageDuplicateError, StorageWriteError } from '#core/errors';
+import { StorageDuplicateError, YambError } from '#core/errors';
 
 import { MongoConnectionError } from '../errors/index.js';
 
-export function classify(cause, method, signal, ErrorClass = StorageWriteError, abort) {
-  const error = abort ? abort.restore(cause) : cause;
-
-  if (signal?.aborted && Object.is(error, signal.reason)) {
-    return signal.reason;
+export function classify(error, method, ErrorClass, abort) {
+  if (abort?.cancelled(error)) {
+    return abort.reason;
   }
 
-  if (error?.code?.startsWith?.('YAMB_')) {
+  if (error instanceof YambError) {
     return error;
   }
 

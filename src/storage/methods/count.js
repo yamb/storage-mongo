@@ -1,9 +1,9 @@
-import { StorageNotOpenError, StorageReadError } from '#core/errors';
+import { StorageReadError } from '#core/errors';
 
 import { buildMongoFilter } from '../../query/filter.js';
 import { driverAbort } from '../abort.js';
 import { classify } from '../errors.js';
-import { getState } from '../internal.js';
+import { getState, ready } from '../internal.js';
 
 export default {
   name: 'count',
@@ -12,19 +12,15 @@ export default {
     const { signal } = options;
     signal?.throwIfAborted();
     const state = getState(storage);
-
-    if (!state.collection) {
-      throw new StorageNotOpenError();
-    }
-
+    const collection = ready(state);
     const filter = buildMongoFilter(query, true, state.optionDefaults);
 
     using abort = signal ? driverAbort(signal) : null;
 
     try {
-      return await state.collection.countDocuments(filter, { signal: abort?.signal });
+      return await collection.countDocuments(filter, { signal: abort?.signal });
     } catch (error) {
-      throw classify(error, 'count', signal, StorageReadError, abort);
+      throw classify(error, 'count', StorageReadError, abort);
     }
   }
 };

@@ -15,25 +15,16 @@ test('status filter', () => {
   });
 });
 
-test('tag filter (multikey)', () => {
-  assert.deepEqual(buildMongoFilter({ tag: 'js' }), { tags: 'js' });
-});
-
 test('tags array filter ($all)', () => {
   assert.deepEqual(buildMongoFilter({ tags: ['js', 'node'] }), {
     tags: { $all: ['js', 'node'] }
   });
 });
 
-test('tag + tags merge into one $all set (AND of all tags)', () => {
-  assert.deepEqual(buildMongoFilter({ tag: 'a', tags: ['b'] }), {
-    tags: { $all: ['a', 'b'] }
-  });
-});
-
-test('tag + multiple tags merges all into $all', () => {
-  assert.deepEqual(buildMongoFilter({ tag: 'a', tags: ['b', 'c'] }), {
-    tags: { $all: ['a', 'b', 'c'] }
+test('unknown query keys are rejected and undefined ones are ignored', () => {
+  assert.throws(() => buildMongoFilter({ tag: 'js' }), { code: 'YAMB_QUERY_VALIDATION' });
+  assert.deepEqual(buildMongoFilter({ tag: undefined, tags: ['js'] }), {
+    tags: { $all: ['js'] }
   });
 });
 
@@ -41,6 +32,21 @@ test('before/after Instant → fixed-precision ISO string', () => {
   const before = Temporal.Instant.from('2026-05-01T00:00:00Z');
   const result = buildMongoFilter({ before });
   assert.deepEqual(result, { publishedAt: { $lt: '2026-05-01T00:00:00.000000000Z' } });
+});
+
+test('ISO string bounds are normalized to fixed-precision UTC', () => {
+  assert.deepEqual(
+    buildMongoFilter({ before: '2026-05-01T03:00:00+03:00', after: '2026-04-01T00:00:00.5Z' }),
+    {
+      publishedAt: {
+        $lt: '2026-05-01T00:00:00.000000000Z',
+        $gt: '2026-04-01T00:00:00.500000000Z'
+      }
+    }
+  );
+  assert.throws(() => buildMongoFilter({ before: 'yesterday' }), {
+    code: 'YAMB_QUERY_VALIDATION'
+  });
 });
 
 test('cursor + ascending (desc=false) → $gt keyset, sort uri asc', () => {
@@ -100,12 +106,6 @@ test('rejects operator-object in status field', () => {
   });
 });
 
-test('rejects operator-object in tag field', () => {
-  assert.throws(() => buildMongoFilter({ tag: { $regex: '.*' } }), {
-    code: 'YAMB_QUERY_VALIDATION'
-  });
-});
-
 test('rejects operator-object inside tags array', () => {
   assert.throws(() => buildMongoFilter({ tags: ['ok', { $ne: null }] }), {
     code: 'YAMB_QUERY_VALIDATION'
@@ -115,13 +115,6 @@ test('rejects operator-object inside tags array', () => {
 test('rejects operator-object in uri field', () => {
   assert.throws(() => buildMongoFilter({ uri: { $gt: '' } }), {
     code: 'YAMB_QUERY_VALIDATION'
-  });
-});
-
-test('accepts Date in before/after (not rejected as operator)', () => {
-  const before = new Date('2026-05-01T00:00:00Z');
-  assert.deepEqual(buildMongoFilter({ before }), {
-    publishedAt: { $lt: '2026-05-01T00:00:00.000000000Z' }
   });
 });
 
@@ -161,9 +154,9 @@ test('accepts Instant/string in cursor (not rejected as operator)', () => {
 test('combined filters', () => {
   const before = Temporal.Instant.from('2026-05-01T00:00:00Z');
 
-  assert.deepEqual(buildMongoFilter({ status: 'published', tag: 'js', before }), {
+  assert.deepEqual(buildMongoFilter({ status: 'published', tags: ['js'], before }), {
     status: 'published',
-    tags: 'js',
+    tags: { $all: ['js'] },
     publishedAt: { $lt: '2026-05-01T00:00:00.000000000Z' }
   });
 });

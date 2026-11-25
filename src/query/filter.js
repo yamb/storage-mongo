@@ -1,38 +1,28 @@
 import { QueryValidationError } from '#core/errors';
-import { encodeInstant, OptionFilterSchema, TagSchema } from '#core/schemas';
+import { encodeInstant, InstantSchema, OptionFilterSchema, TagsSchema } from '#core/schemas';
 
-function nonempty(field, value) {
-  if (value === '') {
-    throw new QueryValidationError(`query.${field} must not be an empty string`, {
-      details: { field }
-    });
-  }
+const fields = new Set(['status', 'tags', 'uri', 'before', 'after', 'options', 'cursor']);
+
+function invalid(field, message) {
+  return new QueryValidationError(`query.${field} ${message}`, { details: { field } });
 }
 
-function bound(value) {
-  if (value instanceof Temporal.Instant) {
-    return encodeInstant(value);
-  }
-
-  if (value instanceof Date) {
-    return encodeInstant(Temporal.Instant.fromEpochMilliseconds(value.getTime()));
+function text(field, value) {
+  if (typeof value !== 'string' || value === '') {
+    throw invalid(field, 'must be a nonempty string');
   }
 
   return value;
 }
 
-function literal(field, value) {
-  if (
-    value !== null &&
-    typeof value === 'object' &&
-    !(value instanceof Date) &&
-    !(value instanceof Temporal.Instant)
-  ) {
-    throw new QueryValidationError(
-      `query.${field} must be a primitive (string/number); got an object — operator injection rejected`,
-      { details: { field, type: typeof value } }
-    );
+function instant(field, value) {
+  const result = InstantSchema.safeParse(value);
+
+  if (!result.success) {
+    throw invalid(field, 'must be an instant');
   }
+
+  return encodeInstant(result.data);
 }
 
 function option(value, defaulted) {
@@ -48,6 +38,12 @@ function option(value, defaulted) {
 }
 
 export function buildMongoFilter(query, descending = true, defaults = {}) {
+  for (const [key, value] of Object.entries(query)) {
+    if (value !== undefined && !fields.has(key)) {
+      throw invalid(key, 'is not supported');
+    }
+  }
+
   const filter = {};
 
   if (query.options !== undefined) {
@@ -74,71 +70,47 @@ export function buildMongoFilter(query, descending = true, defaults = {}) {
   }
 
   if (query.status !== undefined) {
-    nonempty('status', query.status);
-    literal('status', query.status);
-    filter.status = query.status;
-  }
-
-  if (query.tag !== undefined) {
-    if (!TagSchema.safeParse(query.tag).success) {
-      throw new QueryValidationError('query.tag must be a string of 1 to 64 UTF-16 units');
-    }
+    filter.status = text('status', query.status);
   }
 
   if (query.tags !== undefined) {
-    if (!TagSchema.array().safeParse(query.tags).success) {
-      throw new QueryValidationError(
-        'query.tags must be an array of strings of 1 to 64 UTF-16 units'
-      );
-    }
-  }
+    const result = TagsSchema.safeParse(query.tags);
 
-  if (query.tags?.length > 0) {
-    filter.tags = {
-      $all: query.tag !== undefined ? [query.tag, ...query.tags] : [...query.tags]
-    };
-  } else if (query.tag !== undefined) {
-    filter.tags = query.tag;
+    if (!result.success) {
+      throw invalid('tags', 'must be an array of up to 50 strings of 1 to 64 UTF-16 units');
+    }
+
+    if (result.data.length > 0) {
+      filter.tags = { $all: result.data };
+    }
   }
 
   if (query.uri !== undefined) {
-    nonempty('uri', query.uri);
-    literal('uri', query.uri);
-    filter.uri = query.uri;
+    filter.uri = text('uri', query.uri);
   }
 
-  if (query.before || query.after) {
+  if (query.before !== undefined || query.after !== undefined) {
     filter.publishedAt = {};
 
-    if (query.before) {
-      literal('before', query.before);
-      filter.publishedAt.$lt = bound(query.before);
+    if (query.before !== undefined) {
+      filter.publishedAt.$lt = instant('before', query.before);
     }
 
-    if (query.after) {
-      literal('after', query.after);
-      filter.publishedAt.$gt = bound(query.after);
+    if (query.after !== undefined) {
+      filter.publishedAt.$gt = instant('after', query.after);
     }
   }
 
-  if (query.cursor) {
-    if (
-      typeof query.cursor !== 'object' ||
-      Array.isArray(query.cursor) ||
-      query.cursor.publishedAt == null ||
-      query.cursor.uri == null
-    ) {
-      throw new QueryValidationError('query.cursor must be an object with publishedAt and uri', {
-        details: { field: 'cursor' }
-      });
+  if (query.cursor !== undefined) {
+    const { cursor } = query;
+
+    if (cursor === null || typeof cursor !== 'object') {
+      throw invalid('cursor', 'must be an object with publishedAt and uri');
     }
 
-    const { publishedAt, uri } = query.cursor;
-    literal('cursor.publishedAt', publishedAt);
-    literal('cursor.uri', uri);
-
     const operator = descending ? '$lt' : '$gt';
-    const date = bound(publishedAt);
+    const date = instant('cursor.publishedAt', cursor.publishedAt);
+    const uri = text('cursor.uri', cursor.uri);
 
     filter.$or = [
       { publishedAt: { [operator]: date } },
