@@ -83,16 +83,20 @@ test('tag intersections, time bounds, exact URI and pagination execute in storag
   await storage.save(raw('draft', { status: 'draft' }));
 
   assert.equal(await storage.count({}), 4);
-  assert.equal(await storage.count({ status: 'published', tag: 'intro', tags: ['meta'] }), 2);
-  assert.equal(await storage.count({ tag: 'intro', tags: ['other'] }), 0);
+  assert.equal(await storage.count({ status: 'published', tags: ['intro', 'meta'] }), 2);
+  assert.equal(await storage.count({ tags: ['intro', 'other'] }), 0);
 
-  const before = await Array.fromAsync(
-    storage.all({ status: 'published', before: Temporal.Instant.from('2026-04-27T00:00:00Z') })
-  );
-  assert.deepEqual(
-    before.map((p) => p.slug),
-    ['bbb', 'aaa']
-  );
+  for (const bound of [
+    Temporal.Instant.from('2026-04-27T00:00:00Z'),
+    '2026-04-27T12:00:00Z',
+    '2026-04-27T15:00:00+03:00'
+  ]) {
+    const before = await Array.fromAsync(storage.all({ status: 'published', before: bound }));
+    assert.deepEqual(
+      before.map((p) => p.slug),
+      ['bbb', 'aaa']
+    );
+  }
 
   const after = await Array.fromAsync(
     storage.all({ after: Temporal.Instant.from('2026-04-27T00:00:00Z') })
@@ -127,7 +131,14 @@ test('invalid standalone reads and queries fail without exposing records', async
   await assert.rejects(() => storage.find({ $ne: null }), { code: 'YAMB_STORAGE_READ' });
   await assert.rejects(() => storage.fetch({ $ne: null }), { code: 'YAMB_STORAGE_READ' });
 
-  for (const query of [{ status: '' }, { tag: '' }, { uri: '' }]) {
+  for (const query of [
+    { status: '' },
+    { status: 1 },
+    { uri: '' },
+    { before: 'yesterday' },
+    { after: 0 },
+    { cursor: { publishedAt: '2026-04-27', uri: '2026/04/aaa' } }
+  ]) {
     await assert.rejects(async () => Array.fromAsync(storage.all(query)), {
       code: 'YAMB_QUERY_VALIDATION'
     });
@@ -138,4 +149,10 @@ test('invalid standalone reads and queries fail without exposing records', async
       code: 'YAMB_QUERY_VALIDATION'
     });
   }
+
+  const all = storage.all();
+  const entries = storage.entries();
+  await storage.close();
+  await assert.rejects(Array.fromAsync(all), { code: 'YAMB_STORAGE_NOT_OPEN' });
+  await assert.rejects(Array.fromAsync(entries), { code: 'YAMB_STORAGE_NOT_OPEN' });
 });

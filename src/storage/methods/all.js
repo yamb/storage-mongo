@@ -1,4 +1,4 @@
-import { StorageNotOpenError, StorageReadError, QueryValidationError } from '#core/errors';
+import { QueryValidationError, StorageReadError } from '#core/errors';
 import { LimitSchema, OffsetSchema } from '#core/schemas';
 
 import { buildMongoFilter } from '../../query/filter.js';
@@ -6,28 +6,16 @@ import { buildMongoSort } from '../../query/sort.js';
 import { driverAbort } from '../abort.js';
 import { iterateCursor } from '../cursor.js';
 import { classify } from '../errors.js';
-import { getState } from '../internal.js';
+import { getState, ready } from '../internal.js';
 import { hydrateRaw } from './hydrate.js';
 
-function validatePage(options) {
-  if (options.limit !== undefined) {
-    const result = LimitSchema.safeParse(options.limit);
+function check(schema, field, value, expected) {
+  const result = schema.safeParse(value);
 
-    if (!result.success) {
-      throw new QueryValidationError(`options.limit must be a non-negative integer or null`, {
-        details: { field: 'limit', issues: result.error.issues }
-      });
-    }
-  }
-
-  if (options.offset !== undefined) {
-    const result = OffsetSchema.safeParse(options.offset);
-
-    if (!result.success) {
-      throw new QueryValidationError(`options.offset must be a non-negative integer`, {
-        details: { field: 'offset', issues: result.error.issues }
-      });
-    }
+  if (!result.success) {
+    throw new QueryValidationError(`options.${field} must be ${expected}`, {
+      details: { field, issues: result.error.issues }
+    });
   }
 }
 
@@ -35,42 +23,27 @@ export default {
   name: 'all',
 
   fn(storage, query = {}, options = {}) {
-    const { signal } = options;
+    const { signal, order, limit = null, offset = 0 } = options;
     signal?.throwIfAborted();
     const state = getState(storage);
+    ready(state);
+    check(LimitSchema, 'limit', limit, 'a non-negative integer or null');
+    check(OffsetSchema, 'offset', offset, 'a non-negative integer');
 
-    if (!state.collection) {
-      throw new StorageNotOpenError();
-    }
-
-    validatePage(options);
-
-    const descending = (options.order ?? '-publishedAt').startsWith('-');
-    const filter = buildMongoFilter(query, descending, state.optionDefaults);
-    const sort = buildMongoSort(options.order);
+    const sort = buildMongoSort(order);
+    const filter = buildMongoFilter(query, sort.uri === -1, state.optionDefaults);
+    const page = limit === null ? { sort, skip: offset } : { sort, skip: offset, limit };
 
     return {
       async *[Symbol.asyncIterator]() {
         signal?.throwIfAborted();
 
-        if (options.limit === 0) {
+        if (limit === 0) {
           return;
         }
 
         using abort = signal ? driverAbort(signal) : null;
-        const create = () => {
-          const page = { sort, signal: abort?.signal };
-
-          if (options.limit != null) {
-            page.limit = options.limit;
-          }
-
-          if (options.offset !== undefined) {
-            page.skip = options.offset;
-          }
-
-          return state.collection.find(filter, page);
-        };
+        const create = () => ready(state).find(filter, { ...page, signal: abort?.signal });
 
         try {
           for await (const doc of iterateCursor(create, abort?.signal)) {
@@ -78,7 +51,7 @@ export default {
             yield hydrateRaw(doc);
           }
         } catch (error) {
-          throw classify(error, 'all', signal, StorageReadError, abort);
+          throw classify(error, 'all', StorageReadError, abort);
         }
       }
     };

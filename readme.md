@@ -68,17 +68,19 @@ console.log(saved.text);
 | `{ tags: 1 }`                             |            |
 | `{ 'links.related': 1 }`                  |            |
 
-The check requires full, visible indexes without a collation entry. A missing collection or index fails with `YAMB_MONGODB_INDEX`.
+The check requires a collection, not a view, without a default collation and full, visible indexes without a collation entry. A missing or mismatched collection or index fails with `YAMB_MONGODB_INDEX`.
 
 ### BSON and writes
 
-`id` maps to MongoDB `_id`. Both `_id` and `links.related` use BSON `ObjectId` values in MongoDB and strings at the adapter boundary. The adapter stores source data and fixed-precision UTC date strings, omitting `undefined` fields.
+`id` maps to MongoDB `_id`. Both `_id` and `links.related` use BSON `ObjectId` values in MongoDB and lowercase 24-digit hexadecimal strings at the adapter boundary. For any other ID, `find(id)` returns `null`, updates, removals and fences reject with `YAMB_POST_NOT_FOUND`, and a related ID rejects with `YAMB_LINK_REF_NOT_FOUND`, all without a database command. The adapter stores source data and fixed-precision UTC date strings, omitting `undefined` fields.
 
-Save captures input before driver I/O. It rejects cycles, unsupported values, unpaired surrogates in strings or keys, nesting deeper than 100 and a BSON size lower bound above 16 MiB. The driver checks the exact BSON size.
+Save captures input before driver I/O. It accepts strings, numbers, booleans, `null`, plain objects and arrays, and rejects other values, cycles, unpaired surrogates in strings or keys, nesting deeper than 100 and a BSON size lower bound above 16 MiB. The driver checks the exact BSON size.
 
 Updates replace the complete document. A missing update target fails, and the unique index enforces URI collisions. Inserts, updates, removals and fences require driver acknowledgment.
 
-Core stores a version string in the top-level `version` field. When core supplies an expected version, `replaceOne`, `deleteOne` and the fence `updateOne` filter on `{ _id, version }`, so the comparison and the write are one atomic operation; `null` matches a document without `version`. A filter that matches nothing is followed by an `_id` lookup that reports `YAMB_POST_CONFLICT` for an existing document and `YAMB_POST_NOT_FOUND` otherwise. Documents written before versions need no migration: their first conditional write or fence adds the field.
+Core stores a version string in the top-level `version` field. When core supplies an expected version, `replaceOne`, `deleteOne` and the fence `updateOne` filter on `{ _id, version }`, so the comparison and the write are one atomic operation; `null` matches a document without `version`. A filter that matches nothing is followed by an `_id` lookup that reports `YAMB_POST_CONFLICT` for an existing document and `YAMB_POST_NOT_FOUND` otherwise.
+
+A query accepts `status`, `uri`, `tags`, `before`, `after`, `options` and core’s internal `cursor`; any other key fails with `YAMB_QUERY_VALIDATION`. `status` and `uri` are nonempty strings matched exactly. `tags` holds up to 50 tags that must all match. `before` and `after` accept an instant or an ISO string and compare as fixed-precision UTC strings.
 
 MongoDB executes queries with typed option comparisons. Missing option fields match defaults supplied by core on open. Arrays never match a scalar option filter. Each option filter is a field predicate on `options.<name>`, so an application index such as `{ status: 1, 'options.homepage': 1, publishedAt: -1, uri: -1 }` can serve it. `find(id)` looks up a post by ID and `fetch(uri)` looks it up by current URI. Core refreshes its lookup maps from the `[id, uri]` pairs yielded by `entries()`.
 
@@ -126,6 +128,7 @@ Each traversal owns a lazy cursor. Early exit or cancellation awaits cleanup and
 | `YAMB_STORAGE_READ`, `YAMB_STORAGE_WRITE` | Read/write, BSON or cursor cleanup failure; cause retained |
 | `YAMB_STORAGE_DUPLICATE` | Duplicate key |
 | `YAMB_POST_NOT_FOUND` | Missing update/removal/fence target; missing reads return `null` |
+| `YAMB_LINK_REF_NOT_FOUND` | Related ID that cannot be stored |
 | `YAMB_POST_CONFLICT` | Stored version differs from the expected one; nothing written |
 | `YAMB_STORAGE_NOT_OPEN` | Operation outside an open lifetime |
 | `YAMB_QUERY_VALIDATION` | Invalid query or pagination |

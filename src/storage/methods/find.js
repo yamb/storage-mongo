@@ -1,10 +1,8 @@
-import { ObjectId } from 'mongodb';
-
-import { StorageNotOpenError, StorageReadError } from '#core/errors';
+import { StorageReadError } from '#core/errors';
 
 import { driverAbort } from '../abort.js';
 import { classify } from '../errors.js';
-import { getState } from '../internal.js';
+import { getState, objectId, ready } from '../internal.js';
 import { hydrateRaw } from './hydrate.js';
 
 export default {
@@ -12,11 +10,7 @@ export default {
 
   async fn(storage, id, options = {}) {
     const { signal } = options;
-    const state = getState(storage);
-
-    if (!state.collection) {
-      throw new StorageNotOpenError();
-    }
+    const collection = ready(getState(storage));
 
     if (typeof id !== 'string') {
       throw new StorageReadError('id must be a string');
@@ -24,21 +18,18 @@ export default {
 
     signal?.throwIfAborted();
 
-    if (!ObjectId.isValid(id)) {
+    const _id = objectId(id);
+
+    if (!_id) {
       return null;
     }
 
     using abort = signal ? driverAbort(signal) : null;
 
     try {
-      const doc = await state.collection.findOne(
-        { _id: new ObjectId(id) },
-        { signal: abort?.signal }
-      );
-
-      return hydrateRaw(doc);
+      return hydrateRaw(await collection.findOne({ _id }, { signal: abort?.signal }));
     } catch (error) {
-      throw classify(error, 'find', signal, StorageReadError, abort);
+      throw classify(error, 'find', StorageReadError, abort);
     }
   }
 };

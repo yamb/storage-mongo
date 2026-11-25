@@ -1,6 +1,6 @@
 {
   "name": "yamb-storage-mongo",
-  "version": "0.1.4",
+  "version": "0.2.0",
   "description": "MongoDB storage for Yamb using the official MongoDB driver",
   "keywords": [
     "blog",

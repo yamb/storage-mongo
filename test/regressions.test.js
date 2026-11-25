@@ -154,7 +154,7 @@ test('coalesced opens retain the first context snapshot and can retry after abor
   }
 });
 
-test('invalid tags fail before querying while valid tag combinations retain their meaning', async () => {
+test('invalid tags and unknown query keys fail before querying while valid tags match all', async () => {
   const client = new MongoClient(uri, { retryWrites: false, monitorCommands: true });
   const storage = mongodb({ client });
 
@@ -168,27 +168,31 @@ test('invalid tags fail before querying while valid tag combinations retain thei
       commands++;
     });
 
-    for (const tags of [
-      null,
-      'restricted',
-      1,
-      { $all: ['restricted'] },
-      [null],
-      [1],
-      [''],
-      ['x'.repeat(65)],
-      Array(1)
+    for (const query of [
+      ...[
+        null,
+        'restricted',
+        1,
+        { $all: ['restricted'] },
+        [null],
+        [1],
+        [''],
+        ['x'.repeat(65)],
+        Array(1),
+        Array(51).fill('restricted')
+      ].map((tags) => ({ tags })),
+      { tag: 'restricted' },
+      { tags: ['restricted'], $where: 'true' }
     ]) {
-      await assert.rejects(() => storage.count({ tags }), { code: 'YAMB_QUERY_VALIDATION' });
-      assert.throws(() => storage.all({ tags }), { code: 'YAMB_QUERY_VALIDATION' });
+      await assert.rejects(() => storage.count(query), { code: 'YAMB_QUERY_VALIDATION' });
+      assert.throws(() => storage.all(query), { code: 'YAMB_QUERY_VALIDATION' });
     }
     assert.equal(commands, 0);
 
     assert.equal(await storage.count({ tags: [] }), 2);
-    assert.equal(await storage.count({ tag: 'restricted', tags: [] }), 1);
-    assert.equal(await storage.count({ tag: 'restricted', tags: ['other'] }), 0);
+    assert.equal(await storage.count({ tags: ['restricted', 'other'] }), 0);
     assert.equal(await storage.count({ tags: ['restricted'] }), 1);
-    assert.equal(await storage.count({ tags: Array(60).fill('restricted') }), 1);
+    assert.equal(await storage.count({ tags: Array(50).fill('restricted') }), 1);
   } finally {
     await storage.close();
     await client.close();
@@ -622,7 +626,11 @@ test('BSON snapshot accepts wide valid JSON and rejects cycles and transport ove
         toBSON() {
           return '\ud800';
         }
-      }
+      },
+      { at: Temporal.Instant.from(instant) },
+      { at: new Date(0) },
+      { lookup: new Map([['key', 'value']]) },
+      { bytes: new Uint8Array(1) }
     ]) {
       await assert.rejects(() => storage.save({ ...saved, options }), {
         code: 'YAMB_STORAGE_WRITE'
@@ -632,6 +640,37 @@ test('BSON snapshot accepts wide valid JSON and rejects cycles and transport ove
   } finally {
     await storage.close();
     await client.close();
+  }
+});
+
+test('open rejects a view or a collection with a default collation as unprepared', async () => {
+  const client = new MongoClient(uri, { retryWrites: false });
+  const db = client.db(dbName);
+  const name = `collated_${process.pid}`;
+  const view = `view_${process.pid}`;
+  const simple = { collation: { locale: 'simple' } };
+
+  try {
+    const collated = await db.createCollection(name, { collation: { locale: 'en', strength: 2 } });
+    for (const index of await db.collection('posts').listIndexes().toArray()) {
+      if (index.name !== '_id_') {
+        await collated.createIndex(index.key, index.unique ? { unique: true, ...simple } : simple);
+      }
+    }
+    await db.createCollection(view, { viewOn: 'posts', pipeline: [] });
+
+    for (const collection of [name, view]) {
+      const storage = mongodb({ client, collection });
+      await assert.rejects(() => storage.open(), { code: 'YAMB_MONGODB_INDEX' });
+      await storage.close();
+    }
+  } finally {
+    try {
+      await db.collection(view).drop();
+      await db.collection(name).drop();
+    } finally {
+      await client.close();
+    }
   }
 });
 

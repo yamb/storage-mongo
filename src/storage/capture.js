@@ -8,6 +8,12 @@ function unicode(value) {
   return Buffer.byteLength(value);
 }
 
+function plain(value) {
+  const prototype = Object.getPrototypeOf(value);
+
+  return prototype === Object.prototype || prototype === null;
+}
+
 export function capture(input) {
   const ancestors = new WeakSet();
   let bytes = 0;
@@ -41,12 +47,7 @@ export function capture(input) {
       return value;
     }
 
-    if (value instanceof Date) {
-      charge(8);
-      return new Date(value.getTime());
-    }
-
-    if (typeof value !== 'object') {
+    if (typeof value !== 'object' || !(Array.isArray(value) || plain(value))) {
       throw new Error('mongodb document requires data values');
     }
 
@@ -62,11 +63,7 @@ export function capture(input) {
     ancestors.add(value);
     const result = Array.isArray(value) ? [] : {};
 
-    for (const key in value) {
-      if (!Object.hasOwn(value, key)) {
-        continue;
-      }
-
+    for (const key of Object.keys(value)) {
       const item = value[key];
 
       if (item === undefined) {

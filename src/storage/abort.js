@@ -11,8 +11,11 @@ export function driverAbort(signal) {
 
   return {
     signal: controller.signal,
-    restore(error) {
-      return error === reason ? signal.reason : error;
+    get reason() {
+      return signal.reason;
+    },
+    cancelled(error) {
+      return error === reason || (signal.aborted && Object.is(error, signal.reason));
     },
     [Symbol.dispose]() {
       listener[Symbol.dispose]();

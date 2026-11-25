@@ -1,15 +1,10 @@
-import { StorageNotOpenError } from '#core/errors';
-
-import { getState } from '../internal.js';
+import { getState, ready } from '../internal.js';
 
 export default {
   name: 'sync',
 
   async fn(storage, options = {}) {
-    if (!getState(storage).collection) {
-      throw new StorageNotOpenError();
-    }
-
+    ready(getState(storage));
     options.signal?.throwIfAborted();
   }
 };
